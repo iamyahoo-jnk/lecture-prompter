@@ -166,6 +166,7 @@ button.primary{background:var(--cur);border-color:var(--cur);color:#fff;font-wei
 <!-- 시작 화면 -->
 <div id="startView" class="overlay">
   <h1>강의 프롬프터</h1>
+  <small style="color:var(--dim)">버전 4 · 9월 28일</small>
   <p id="startInfo">대본을 불러와 주세요.</p>
   <div class="btns">
     <button id="loadBtn2">대본 불러오기</button>
@@ -594,11 +595,14 @@ function startInfo(){
   $("startBtn").textContent = run.started ? "이어서 하기" : "강의 시작";
   $("startBtn").disabled = $("previewBtn").disabled = !n;
   $("restartBtn").classList.toggle("hidden", !run.started);
-  $("previewBtn").classList.toggle("hidden", run.started);   // 강의 중에는 시간이 흐르므로 미리보기 대신 이어서 하기
 }
 let preview = false;
 function freshRun(){ return {started:false, cur:0, sent:-1, slideStartAt:0, actual:{}, onBreak:false, breakStartAt:0, breakDone:false, log:[]}; }
 $("previewBtn").onclick = () => {
+  if (run.started){
+    if (!confirm("진행 중인 강의 기록(슬라이드 위치·경과 시간)을 지우고 미리보기로 갑니다.\n강의 시작을 누르면 1번부터 새로 시작합니다.")) return;
+    stopMic(); run = freshRun(); saveRun();
+  }
   preview = true; if (!run.started){ run.sent = -1; }
   $("startView").classList.add("hidden"); render(); tick();
   if (!run.started){ stopMic(); micState("", "미리보기 · 마이크 꺼짐 (눌러서 켜기)"); }
