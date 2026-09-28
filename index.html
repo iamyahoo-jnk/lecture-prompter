@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="robots" content="noindex, nofollow">
+<title>강의 프롬프터</title>
+<style>
+:root{
+  --bg:#111418; --panel:#1b2027; --line:#2c333d; --text:#e9edf2; --dim:#7d8794;
+  --cur:#ff5fa2; --cur-text:#fff; --next:#5bc0f8; --next-text:#06202e;
+  --ok:#3ecf8e; --warn:#ffb020; --bad:#ff4d4d; --fs:30px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+  font-family:-apple-system,"Apple SD Gothic Neo",sans-serif;-webkit-text-size-adjust:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+button{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 16px;cursor:pointer;touch-action:manipulation}
+button.primary{background:var(--cur);border-color:var(--cur);color:#fff;font-weight:700}
+.hidden{display:none!important}
+
+/* ── 상단 계기판 ── */
+#bar{display:grid;grid-template-columns:auto 1fr auto auto;gap:14px;align-items:center;
+  padding:10px 16px;padding-top:max(10px,env(safe-area-inset-top));background:var(--panel);border-bottom:1px solid var(--line)}
+.stat{display:flex;flex-direction:column;line-height:1.15}
+.stat small{color:var(--dim);font-size:13px}
+.stat b{font-size:26px;font-variant-numeric:tabular-nums}
+#slideTimer{display:flex;flex-direction:column;gap:4px}
+#slideTimer .row{display:flex;justify-content:space-between;font-variant-numeric:tabular-nums}
+#slideTimer .row b{font-size:26px}
+#track{height:10px;border-radius:5px;background:var(--line);overflow:hidden}
+#fill{height:100%;width:0;background:var(--ok);transition:width .5s}
+.over #fill{background:var(--bad)} .over .row b{color:var(--bad)}
+.late b{color:var(--bad)} .early b{color:var(--ok)}
+
+/* ── 대본 ── */
+#stage{position:absolute;top:var(--barH,80px);bottom:var(--footH,76px);left:0;right:0;overflow-y:auto;
+  padding:18px 24px 40vh;-webkit-overflow-scrolling:touch}
+#slideHead{display:flex;gap:10px;align-items:center;color:var(--dim);font-size:16px;margin-bottom:10px}
+.badge{border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:14px}
+.badge.break{border-color:var(--warn);color:var(--warn)}
+#script{font-size:var(--fs);line-height:1.65;word-break:keep-all}
+#script p{margin:0 0 .5em}
+.s{border-radius:8px;padding:.05em .15em;transition:background .25s,color .25s;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.s.past{color:var(--dim)}
+.s.cur{background:var(--cur);color:var(--cur-text)}
+.s.next{background:var(--next);color:var(--next-text)}
+#empty{font-size:calc(var(--fs)*.8);color:var(--dim)}
+#nextPrev{margin-top:28px;padding-top:14px;border-top:1px dashed var(--line);font-size:calc(var(--fs)*.75);color:var(--dim)}
+#nextPrev .label{font-size:15px;margin-bottom:6px}
+
+/* ── 하단 ── */
+#foot{position:absolute;bottom:0;left:0;right:0;display:flex;gap:10px;align-items:center;
+  padding:10px 16px;padding-bottom:max(10px,env(safe-area-inset-bottom));background:var(--panel);border-top:1px solid var(--line)}
+#foot button{font-size:20px;min-height:52px}
+#heard{flex:1;min-width:0;color:var(--dim);font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:rtl;text-align:left}
+#mic{display:flex;align-items:center;gap:8px}
+#micDot{width:12px;height:12px;border-radius:50%;background:var(--dim)}
+#micDot.on{background:var(--ok);box-shadow:0 0 0 4px rgba(62,207,142,.25)}
+#micDot.err{background:var(--bad)}
+
+/* ── 휴식 / 시작 화면 ── */
+.overlay{position:fixed;inset:0;background:rgba(10,12,15,.96);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:22px;text-align:center;padding:24px;z-index:10}
+.overlay h1{margin:0;font-size:40px}
+.overlay .big{font-size:96px;font-weight:800;font-variant-numeric:tabular-nums}
+.overlay p{margin:0;color:var(--dim);font-size:20px;max-width:640px;line-height:1.5}
+.overlay .btns{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+.overlay button{font-size:22px;padding:14px 28px}
+
+/* ── 편집 ── */
+#editor{position:fixed;inset:0;background:var(--bg);overflow-y:auto;z-index:20;padding:16px;padding-top:max(16px,env(safe-area-inset-top))}
+#editor h2{margin:8px 0 12px}
+.settings{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:16px}
+.settings label{display:flex;flex-direction:column;gap:4px;color:var(--dim);font-size:14px}
+.settings input{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px;font-size:18px}
+#summary{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:16px;line-height:1.6}
+.tools{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;position:sticky;top:0;background:var(--bg);padding:8px 0;z-index:1}
+.card{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px;background:var(--panel)}
+.card.isbreak{border-color:var(--warn)}
+.card header{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:8px;font-size:15px;color:var(--dim)}
+.card header b{color:var(--text);font-size:18px}
+.card header input{width:80px;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:4px 6px}
+.card textarea{width:100%;min-height:110px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;font-size:17px;line-height:1.6}
+.card .edited{color:var(--cur)}
+.breakline{text-align:center;color:var(--warn);margin:-4px 0 12px;font-weight:700}
+</style>
+</head>
+<body>
+
+<div id="bar">
+  <div class="stat"><small>현재 시각</small><b id="clock">--:--</b></div>
+  <div id="slideTimer">
+    <div class="row"><span id="slideNo">슬라이드 –</span><b id="slideTime">0:00 / 0:00</b></div>
+    <div id="track"><div id="fill"></div></div>
+  </div>
+  <div class="stat" id="endBox"><small>예상 종료 (목표 <span id="goal">21:50</span>)</small><b id="endEta">--:--</b></div>
+  <div style="display:flex;gap:8px">
+    <button id="fsDown" aria-label="글자 작게">가−</button>
+    <button id="fsUp" aria-label="글자 크게">가+</button>
+    <button id="editBtn">편집</button>
+  </div>
+</div>
+
+<div id="stage">
+  <div id="slideHead"><span id="headNo"></span><span id="headBadges"></span></div>
+  <div id="script"></div>
+  <div id="nextPrev"></div>
+</div>
+
+<div id="foot">
+  <button id="prevBtn">◀ 이전</button>
+  <div id="mic"><span id="micDot"></span><span id="micLabel">마이크 꺼짐</span></div>
+  <div id="heard"></div>
+  <button id="breakBtn">휴식</button>
+  <button id="nextBtn" class="primary">다음 ▶</button>
+</div>
+
+<!-- 시작 화면 -->
+<div id="startView" class="overlay">
+  <h1>강의 프롬프터</h1>
+  <p id="startInfo">대본을 불러와 주세요.</p>
+  <div class="btns">
+    <button id="loadBtn2">대본 불러오기</button>
+    <button id="editBtn2">편집·시간표</button>
+    <button id="startBtn" class="primary">강의 시작</button>
+  </div>
+  <p style="font-size:15px">강의 시작을 누르면 마이크 사용 허락을 묻습니다. 1번 슬라이드부터 시간이 흐릅니다.</p>
+</div>
+
+<!-- 휴식 화면 -->
+<div id="breakView" class="overlay hidden">
+  <h1>휴식 중</h1>
+  <div class="big" id="breakLeft">10:00</div>
+  <p id="breakInfo"></p>
+  <div class="btns"><button id="resumeBtn" class="primary">강의 재개</button></div>
+</div>
+
+<!-- 편집 -->
+<div id="editor" class="hidden">
+  <div class="tools">
+    <button id="closeEdit" class="primary">닫기</button>
+    <button id="loadBtn">대본 불러오기 (pptx·json)</button>
+    <button id="exportBtn">백업 내보내기</button>
+    <button id="autoBtn">배정 시간 모두 자동으로</button>
+    <button id="resetRun">진행 기록 지우기</button>
+  </div>
+  <h2>시간표</h2>
+  <div class="settings">
+    <label>강의 시작<input id="setStart" type="time"></label>
+    <label>강의 종료 목표<input id="setEnd" type="time"></label>
+    <label>휴식 (분)<input id="setBreak" type="number" min="0" step="1"></label>
+    <label>말 빠르기 (음절/분)<input id="setRate" type="number" min="150" max="500" step="10"></label>
+    <label>대본 없는 장 기본 (초)<input id="setBlank" type="number" min="0" step="5"></label>
+  </div>
+  <div id="summary"></div>
+  <h2>슬라이드별 대본</h2>
+  <div id="cards"></div>
+</div>
+
+<input id="file" type="file" accept=".pptx,.json,application/json" class="hidden">
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const KEY = "prompter.v1";
+
+/* ───────── 데이터 ───────── */
+let db = load() || {
+  settings:{start:"20:00", end:"21:50", breakMin:10, rate:300, blankSec:20, breakAfter:null},
+  slides:[]   // {no, text, videoSec, allocSec|null(자동), edited}
+};
+let run = {started:false, cur:0, sent:-1, slideStartAt:0, actual:{}, onBreak:false, breakStartAt:0, breakDone:false, log:[]};
+try { const r = JSON.parse(localStorage.getItem(KEY+".run")); if (r) run = Object.assign(run, r, {onBreak:false}); } catch(e){}
+
+function load(){ try { return JSON.parse(localStorage.getItem(KEY)); } catch(e){ return null; } }
+function save(){ try { localStorage.setItem(KEY, JSON.stringify(db)); } catch(e){} }
+function saveRun(){ try { localStorage.setItem(KEY+".run", JSON.stringify(run)); } catch(e){} }
+
+/* ───────── 문장 나누기 · 글자 정규화 ───────── */
+function paragraphs(text){
+  return text.split(/\n+/).map(p => p.trim()).filter(Boolean)
+    .map(p => p.split(/(?<=[.?!。])\s+/).map(s => s.trim()).filter(Boolean));
+}
+// 음성인식이 영어 단어를 한글로 적는 경우가 많아, 대본·인식 결과 양쪽을 같은 한글로 맞춘다
+const EN = [["chatgpt","챗지피티"],["openai","오픈에이아이"],["gpt","지피티"],["claude","클로드"],["gemini","제미나이"],
+  ["code","코드"],["notion","노션"],["app","앱"],["md","엠디"],["pdf","피디에프"],["easy","이지"],["agent","에이전트"],["ai","에이아이"]];
+const norm = s => { s = s.toLowerCase(); for (const [e,k] of EN) s = s.split(e).join(k); return s.replace(/[^0-9a-z가-힣]/g, ""); };
+function grams(s){ const g = new Set(); for (let i=0;i<s.length-1;i++) g.add(s.slice(i,i+2)); return g; }
+
+let model = [];  // 슬라이드별 [{text, n, g, p}]  p=문단번호
+function rebuild(){
+  model = db.slides.map(sl => {
+    const out = [];
+    paragraphs(sl.text).forEach((ps, pi) => ps.forEach(t => { const n = norm(t); out.push({text:t, n, g:grams(n), p:pi}); }));
+    return out;
+  });
+}
+
+/* ───────── 시간 배정 ───────── */
+const hm2min = s => { const [h,m] = (s||"0:0").split(":").map(Number); return h*60+m; };
+const min2hm = m => { m = Math.round(m); m = ((m%1440)+1440)%1440; return String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0"); };
+const fmt = sec => { sec = Math.max(0, Math.round(sec)); return Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0"); };
+const syllables = t => norm(t).length;
+
+function lectureSec(){ const s = db.settings; return (hm2min(s.end)-hm2min(s.start)-s.breakMin)*60; }
+function needSec(sl){
+  const talk = syllables(sl.text)/db.settings.rate*60;
+  const base = talk + (sl.videoSec||0);
+  return base > 0 ? base : db.settings.blankSec;
+}
+function allocs(){
+  const total = lectureSec();
+  const fixed = db.slides.reduce((a,s) => a + (s.allocSec!=null ? s.allocSec : 0), 0);
+  const autoNeed = db.slides.reduce((a,s) => a + (s.allocSec==null ? needSec(s) : 0), 0);
+  const k = autoNeed > 0 ? Math.max(0, total - fixed)/autoNeed : 0;
+  return db.slides.map(s => s.allocSec!=null ? s.allocSec : needSec(s)*k);
+}
+function defaultBreakAfter(al){
+  // 휴식 전까지 강의 시간이 (휴식 시각 − 시작) 에 가장 가까워지는 장
+  const target = lectureSec()/2; let c = 0, best = 1, bd = 1e9;
+  al.forEach((a,i) => { c += a; const d = Math.abs(c-target); if (d < bd){ bd = d; best = i+1; } });
+  return best;
+}
+function breakAfter(){ return db.settings.breakAfter || defaultBreakAfter(allocs()); }
+
+/* ───────── 진행 ───────── */
+let AL = [];
+function elapsedCur(){ return (run.actual[run.cur]||0) + (run.started && !run.onBreak ? (Date.now()-run.slideStartAt)/1000 : 0); }
+function goSlide(i, how){
+  if (!db.slides.length) return;
+  i = Math.max(0, Math.min(db.slides.length-1, i));
+  if (run.started && !run.onBreak){
+    run.actual[run.cur] = elapsedCur();
+    run.log.push({t:Date.now(), from:run.cur+1, to:i+1, how});
+  }
+  run.cur = i; run.sent = -1; run.slideStartAt = Date.now(); hits = {};
+  saveRun(); render(); tick();
+  $("stage").scrollTop = 0;
+}
+function setSentence(j){
+  run.sent = j; saveRun(); paintSentences();
+}
+
+/* ───────── 음성 인식 · 문장 맞추기 ───────── */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, listening = false, hits = {};
+function startMic(){
+  if (!SR){ micState("err","이 브라우저는 음성인식 불가"); return; }
+  listening = true;
+  rec = new SR(); rec.lang = "ko-KR"; rec.continuous = true; rec.interimResults = true;
+  rec.onstart = () => micState("on","듣는 중");
+  rec.onresult = e => {
+    let txt = ""; for (let i=0;i<e.results.length;i++) txt += e.results[i][0].transcript + " ";
+    heard(txt);
+  };
+  rec.onerror = e => { if (e.error==="not-allowed" || e.error==="service-not-allowed"){ listening=false; micState("err","마이크 허락 필요"); } else micState("err","다시 연결 중…"); };
+  rec.onend = () => { if (listening) setTimeout(() => { try { rec.start(); } catch(e){} }, 200); else micState("","마이크 꺼짐"); };
+  try { rec.start(); } catch(e){}
+}
+function stopMic(){ listening = false; try { rec && rec.stop(); } catch(e){} }
+function micState(c, label){ $("micDot").className = c; $("micLabel").textContent = label; }
+
+let lastTail = "";
+function heard(raw){
+  $("heard").textContent = raw.trim().slice(-80);
+  const all = norm(raw);
+  if (all.length < 6) return;
+  const tail = all.slice(-14);
+  if (tail === lastTail) return; lastTail = tail;
+  match(tail);
+}
+function score(tail, g){ const tg = grams(tail); let h = 0; tg.forEach(x => g.has(x) && h++); return tg.size ? h/tg.size : 0; }
+function match(tail){
+  const sents = model[run.cur] || [];
+  let best = null;
+  const from = Math.max(0, run.sent-1), to = Math.min(sents.length-1, run.sent+4);
+  for (let j=from;j<=to;j++){
+    let sc = score(tail, sents[j].g);
+    if (j < run.sent) sc -= .15;             // 뒤로 가기는 조심스럽게
+    if (j > run.sent+2) sc -= .1;            // 멀리 건너뛰기도 조심스럽게
+    if (!best || sc > best.sc) best = {j, sc};
+  }
+  // 다음 슬라이드 첫 두 문장 → 자동 넘김 후보
+  const nx = model[run.cur+1];
+  let nxBest = null;
+  if (nx && nx.length && (run.sent >= sents.length-2 || sents.length===0)){
+    for (let j=0;j<Math.min(2,nx.length);j++){
+      const sc = score(tail, nx[j].g);
+      if (!nxBest || sc > nxBest.sc) nxBest = {j, sc};
+    }
+  }
+  if (nxBest && nxBest.sc >= .7 && (!best || nxBest.sc > best.sc + .1)){
+    hits.next = (hits.next||0) + 1;
+    if (hits.next >= 2){ const j = nxBest.j; goSlide(run.cur+1, "voice"); setSentence(j); }
+    return;
+  }
+  hits.next = 0;
+  if (best && best.sc >= .6 && best.j !== run.sent) setSentence(best.j);
+}
+
+/* ───────── 화면 그리기 ───────── */
+function render(){
+  AL = allocs();
+  const n = db.slides.length, sl = db.slides[run.cur];
+  $("goal").textContent = db.settings.end;
+  if (!sl){ $("script").innerHTML = ""; return; }
+  $("slideNo").textContent = `슬라이드 ${run.cur+1} / ${n}`;
+  $("headNo").textContent = `${run.cur+1}번 슬라이드`;
+  const b = [];
+  if (sl.videoSec) b.push(`<span class="badge">영상 ${fmt(sl.videoSec)}</span>`);
+  if (run.cur+1 === breakAfter() && !run.breakDone) b.push(`<span class="badge break">이 장 끝나고 휴식</span>`);
+  $("headBadges").innerHTML = b.join(" ");
+  const sents = model[run.cur];
+  if (!sents.length){
+    $("script").innerHTML = `<div id="empty">대본 없음${sl.videoSec ? ` — 영상 ${fmt(sl.videoSec)}` : ""}<br>끝나면 <b>다음 ▶</b> 을 눌러 주세요.</div>`;
+  } else {
+    let html = "", p = -1;
+    sents.forEach((s,j) => {
+      if (s.p !== p){ if (p >= 0) html += "</p>"; html += "<p>"; p = s.p; }
+      html += `<span class="s" data-j="${j}">${esc(s.text)}</span> `;
+    });
+    $("script").innerHTML = html + "</p>";
+  }
+  const nx = model[run.cur+1];
+  $("nextPrev").innerHTML = run.cur+1 < n
+    ? `<div class="label">다음 슬라이드 ${run.cur+2}번</div><span class="s" id="nxFirst">${esc(nx && nx.length ? nx[0].text : "(대본 없음)")}</span>`
+    : `<div class="label">마지막 슬라이드입니다</div>`;
+  paintSentences();
+}
+function paintSentences(){
+  const spans = $("script").querySelectorAll(".s");
+  spans.forEach(el => {
+    const j = +el.dataset.j;
+    el.className = "s" + (j < run.sent ? " past" : j === run.sent ? " cur" : j === run.sent+1 ? " next" : "");
+  });
+  const nf = $("nxFirst");
+  if (nf) nf.className = "s" + (run.sent >= spans.length-1 && spans.length ? " next" : "");
+  const cur = $("script").querySelector(".s.cur") || $("script").querySelector(".s.next");
+  if (cur){
+    const st = $("stage"), r = cur.getBoundingClientRect(), sr = st.getBoundingClientRect();
+    if (r.top < sr.top + 40 || r.bottom > sr.top + sr.height*0.55)
+      st.scrollTo({top: st.scrollTop + r.top - sr.top - sr.height*0.25, behavior:"smooth"});
+  }
+}
+const esc = s => s.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+/* ───────── 1초마다: 시계 · 슬라이드 타이머 · 예상 종료 ───────── */
+function tick(){
+  const now = new Date(), nowMin = now.getHours()*60 + now.getMinutes() + now.getSeconds()/60;
+  $("clock").textContent = min2hm(Math.floor(nowMin));
+  if (!db.slides.length) return;
+  const al = AL[run.cur] || 0, el = elapsedCur();
+  $("slideTime").textContent = el > al ? `+${fmt(el-al)} 초과` : `${fmt(el)} / ${fmt(al)}`;
+  $("fill").style.width = Math.min(100, al ? el/al*100 : 100) + "%";
+  $("slideTimer").classList.toggle("over", el > al);
+
+  let restSec = Math.max(0, al-el);
+  for (let i=run.cur+1;i<AL.length;i++) restSec += AL[i];
+  let brk = run.breakDone ? 0 : db.settings.breakMin*60;
+  if (run.onBreak) brk = Math.max(0, db.settings.breakMin*60 - (Date.now()-run.breakStartAt)/1000);
+  const base = run.started ? nowMin : hm2min(db.settings.start);
+  const eta = base + (restSec + brk)/60;
+  const diff = Math.round(eta - hm2min(db.settings.end));
+  $("endEta").textContent = min2hm(eta) + (diff ? ` (${diff>0?"+":""}${diff}분)` : "");
+  $("endBox").className = "stat " + (diff > 0 ? "late" : diff < 0 ? "early" : "");
+
+  if (run.onBreak){
+    const left = db.settings.breakMin*60 - (Date.now()-run.breakStartAt)/1000;
+    $("breakLeft").textContent = (left < 0 ? "+" : "") + fmt(Math.abs(left));
+    $("breakLeft").style.color = left < 0 ? "var(--bad)" : "";
+  }
+}
+setInterval(tick, 1000);
+
+/* ───────── 휴식 ───────── */
+function startBreak(){
+  if (!run.started) return;
+  run.actual[run.cur] = elapsedCur();
+  run.onBreak = true; run.breakStartAt = Date.now(); saveRun();
+  $("breakInfo").textContent = `재개하면 ${run.cur+2 <= db.slides.length ? run.cur+2 : run.cur+1}번 슬라이드부터 이어갑니다.`;
+  $("breakView").classList.remove("hidden"); stopMic(); tick();
+}
+function endBreak(){
+  run.onBreak = false; run.breakDone = true; run.slideStartAt = Date.now(); saveRun();
+  $("breakView").classList.add("hidden");
+  goSlide(run.cur+1 < db.slides.length ? run.cur+1 : run.cur, "break");
+  startMic();
+}
+
+/* ───────── 편집 화면 ───────── */
+function openEditor(){
+  const s = db.settings;
+  $("setStart").value = s.start; $("setEnd").value = s.end; $("setBreak").value = s.breakMin;
+  $("setRate").value = s.rate; $("setBlank").value = s.blankSec;
+  drawCards(); $("editor").classList.remove("hidden");
+}
+function drawSummary(){
+  const need = db.slides.reduce((a,s) => a+needSec(s), 0), lec = lectureSec(), ba = breakAfter();
+  let cum = 0; AL.slice(0,ba).forEach(a => cum += a);
+  const k = need/lec;
+  $("summary").innerHTML =
+    `대본 ${db.slides.length}장 · 말 ${Math.round(db.slides.reduce((a,s)=>a+syllables(s.text),0)/db.settings.rate)}분 + 영상 ${Math.round(db.slides.reduce((a,s)=>a+(s.videoSec||0),0)/60)}분 = <b>예상 ${Math.round(need/60)}분</b> / 강의 시간 <b>${Math.round(lec/60)}분</b>` +
+    (k > 1.02 ? `<br><span style="color:var(--bad)">🔴 ${Math.round(need/60-lec/60)}분 넘칩니다. 자동 배정은 모든 장을 ${Math.round((1-1/k)*100)}% 씩 줄여 맞춘 값입니다.</span>` : "") +
+    `<br>휴식: <b>${ba}번 슬라이드 뒤</b> — 계획상 ${min2hm(hm2min(db.settings.start)+cum/60)} 시작` +
+    (db.settings.breakAfter ? ` (직접 지정 · <a href="#" id="breakAuto" style="color:var(--next)">자동으로</a>)` : " (자동 · 슬라이드 카드에서 바꿀 수 있음)");
+  const a = $("breakAuto"); if (a) a.onclick = e => { e.preventDefault(); db.settings.breakAfter = null; save(); drawCards(); };
+}
+function drawCards(){
+  rebuild(); AL = allocs(); drawSummary();
+  const ba = breakAfter(); let cum = hm2min(db.settings.start)*60;
+  $("cards").innerHTML = db.slides.map((s,i) => {
+    const start = min2hm(cum/60); cum += AL[i]; if (i+1 === ba) cum += db.settings.breakMin*60;
+    return `<div class="card${i+1===ba?" isbreak":""}" data-i="${i}">
+      <header><b>${i+1}번</b><span>계획 ${start}</span>
+        <label>배정 <input type="text" inputmode="numeric" data-k="alloc" value="${fmt(AL[i])}" placeholder="분:초"></label>
+        <span>${s.allocSec!=null ? "직접 지정" : "자동"}</span>
+        <label>영상(초) <input type="number" data-k="video" value="${s.videoSec||0}"></label>
+        <label><input type="radio" name="brk" data-k="break" ${i+1===ba?"checked":""}> 이 장 뒤 휴식</label>
+        ${s.edited ? '<span class="edited">● 앱에서 고침</span>' : ""}
+      </header>
+      <textarea data-k="text">${esc(s.text)}</textarea>
+    </div>` + (i+1===ba ? `<div class="breakline">── 휴식 ${db.settings.breakMin}분 ──</div>` : "");
+  }).join("");
+}
+$("cards").addEventListener("change", e => {
+  const card = e.target.closest(".card"); if (!card) return;
+  const i = +card.dataset.i, s = db.slides[i], k = e.target.dataset.k;
+  if (k === "text"){ s.text = e.target.value; s.edited = true; }
+  if (k === "video") s.videoSec = Math.max(0, +e.target.value||0);
+  if (k === "break") db.settings.breakAfter = i+1;
+  if (k === "alloc"){
+    const v = e.target.value.trim();
+    if (!v) s.allocSec = null;
+    else { const [m,sec] = v.includes(":") ? v.split(":").map(Number) : [0, Number(v)]; s.allocSec = Math.max(0,(m||0)*60+(sec||0)); }
+  }
+  save(); drawCards();
+});
+["setStart","setEnd","setBreak","setRate","setBlank"].forEach(id => $(id).addEventListener("change", () => {
+  const s = db.settings;
+  s.start = $("setStart").value || s.start; s.end = $("setEnd").value || s.end;
+  s.breakMin = Math.max(0, +$("setBreak").value||0); s.rate = Math.max(150, +$("setRate").value||300);
+  s.blankSec = Math.max(0, +$("setBlank").value||0);
+  save(); drawCards();
+}));
+$("autoBtn").onclick = () => { db.slides.forEach(s => s.allocSec = null); save(); drawCards(); };
+$("closeEdit").onclick = () => { $("editor").classList.add("hidden"); rebuild(); render(); tick(); startInfo(); };
+$("resetRun").onclick = () => {
+  if (!confirm("진행 기록(현재 슬라이드·경과 시간·휴식 여부)을 지웁니다. 대본은 그대로입니다.")) return;
+  stopMic(); run = {started:false, cur:0, sent:-1, slideStartAt:0, actual:{}, onBreak:false, breakStartAt:0, breakDone:false, log:[]};
+  saveRun(); $("startView").classList.remove("hidden"); $("editor").classList.add("hidden"); render(); startInfo();
+};
+$("exportBtn").onclick = () => {
+  const blob = new Blob([JSON.stringify({...db, run}, null, 1)], {type:"application/json"});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  const d = new Date(); a.download = `프롬프터_백업_${d.getMonth()+1}${String(d.getDate()).padStart(2,"0")}_${d.getHours()}${String(d.getMinutes()).padStart(2,"0")}.json`;
+  a.click();
+};
+
+/* ───────── 불러오기 (json · pptx) ───────── */
+$("loadBtn").onclick = $("loadBtn2").onclick = () => $("file").click();
+$("file").onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  try {
+    let slides;
+    if (/\.json$/i.test(f.name)){
+      const j = JSON.parse(await f.text());
+      if (j.settings) db.settings = Object.assign(db.settings, j.settings);
+      slides = j.slides;
+    } else slides = await readPptx(f);
+    merge(slides.map((s,i) => ({no:i+1, text:s.text||"", videoSec:s.videoSec||0, allocSec:s.allocSec ?? null, edited:!!s.edited})));
+  } catch(err){ alert("불러오지 못했습니다: " + err.message); }
+};
+function merge(incoming){
+  const edited = db.slides.filter(s => s.edited).length;
+  let keep = false;
+  if (edited && !incoming.some(s => s.edited))
+    keep = confirm(`앱에서 고친 슬라이드가 ${edited}장 있습니다.\n\n확인 = 고친 내용은 남기고 나머지만 새로 불러오기\n취소 = 전부 새 파일로 덮어쓰기`);
+  db.slides = incoming.map((s,i) => keep && db.slides[i] && db.slides[i].edited ? db.slides[i] : s);
+  save(); rebuild(); render(); tick(); startInfo();
+  if (!$("editor").classList.contains("hidden")) drawCards();
+}
+async function readPptx(file){
+  $("startInfo").textContent = "pptx 읽는 중… (영상은 읽지 않으니 금방 끝납니다)";
+  const zip = await import("https://cdn.jsdelivr.net/npm/@zip.js/zip.js@2.18.2/index.js");
+  const reader = new zip.ZipReader(new zip.BlobReader(file));
+  const entries = {}; (await reader.getEntries()).forEach(en => entries[en.filename] = en);
+  const read = async p => entries[p] ? await entries[p].getData(new zip.TextWriter()) : "";
+  const rels = x => { const r = {}; for (const m of x.matchAll(/<Relationship ([^>]*)\/>/g)){ const id = /Id="([^"]+)"/.exec(m[1]), t = /Target="([^"]+)"/.exec(m[1]); if (id && t) r[id[1]] = t[1]; } return r; };
+  const un = s => s.replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,"&");
+  const prels = rels(await read("ppt/_rels/presentation.xml.rels"));
+  const ids = [...(await read("ppt/presentation.xml")).matchAll(/<p:sldId [^>]*r:id="([^"]+)"/g)].map(m => m[1]);
+  const out = [];
+  for (const rid of ids){
+    const fname = prels[rid].split("/").pop();
+    const sr = rels(await read(`ppt/slides/_rels/${fname}.rels`));
+    let text = "", hasVideo = false;
+    for (const t of Object.values(sr)){
+      if (/\.(mov|mp4|m4v|mp3|m4a|wav)$/i.test(t)) hasVideo = true;
+      if (t.includes("notesSlides/")){
+        const x = await read("ppt/notesSlides/" + t.split("/").pop());
+        for (const sp of x.match(/<p:sp>[\s\S]*?<\/p:sp>/g) || [])
+          if (sp.includes('type="body"'))
+            text = (sp.match(/<a:p>[\s\S]*?<\/a:p>/g) || []).map(p => un([...p.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map(m => m[1]).join(""))).join("\n").trim();
+      }
+    }
+    // pptx 에서는 영상 길이를 알 수 없음 → 예전 값이 있으면 유지
+    const old = db.slides[out.length];
+    out.push({text, videoSec: hasVideo ? (old && old.videoSec) || 0 : 0});
+  }
+  await reader.close();
+  return out;
+}
+
+/* ───────── 조작 ───────── */
+function startInfo(){
+  const n = db.slides.length;
+  $("startInfo").innerHTML = n
+    ? `대본 ${n}장 · 휴식은 ${breakAfter()}번 슬라이드 뒤 · 목표 종료 ${db.settings.end}` + (run.started ? `<br>진행 중이던 강의: ${run.cur+1}번 슬라이드` : "")
+    : "대본을 불러와 주세요.";
+  $("startBtn").textContent = run.started ? "이어서 하기" : "강의 시작";
+  $("startBtn").disabled = !n;
+}
+$("startBtn").onclick = async () => {
+  if (!run.started){ run.started = true; run.cur = 0; run.sent = -1; run.actual = {}; run.log = [{t:Date.now(), start:true}]; }
+  run.slideStartAt = Date.now(); saveRun();
+  $("startView").classList.add("hidden");
+  try { await navigator.wakeLock.request("screen"); } catch(e){}
+  render(); tick(); startMic();
+};
+document.addEventListener("visibilitychange", async () => {
+  if (document.visibilityState === "visible" && run.started){ try { await navigator.wakeLock.request("screen"); } catch(e){} if (!listening && !run.onBreak) startMic(); }
+});
+$("prevBtn").onclick = () => goSlide(run.cur-1, "tap");
+$("nextBtn").onclick = () => goSlide(run.cur+1, "tap");
+$("breakBtn").onclick = startBreak;
+$("resumeBtn").onclick = endBreak;
+$("editBtn").onclick = $("editBtn2").onclick = openEditor;
+$("script").onclick = e => { const s = e.target.closest(".s"); if (s) setSentence(+s.dataset.j); };
+const fsSet = d => { const v = Math.max(18, Math.min(60, (parseInt(getComputedStyle(document.documentElement).getPropertyValue("--fs"))||30) + d)); document.documentElement.style.setProperty("--fs", v+"px"); try { localStorage.setItem(KEY+".fs", v); } catch(e){} };
+$("fsUp").onclick = () => fsSet(2); $("fsDown").onclick = () => fsSet(-2);
+try { const v = localStorage.getItem(KEY+".fs"); if (v) document.documentElement.style.setProperty("--fs", v+"px"); } catch(e){}
+// 좌우 쓸어넘기기
+let tx = null;
+$("stage").addEventListener("touchstart", e => tx = [e.touches[0].clientX, e.touches[0].clientY], {passive:true});
+$("stage").addEventListener("touchend", e => {
+  if (!tx) return; const dx = e.changedTouches[0].clientX - tx[0], dy = e.changedTouches[0].clientY - tx[1]; tx = null;
+  if (Math.abs(dx) > 90 && Math.abs(dx) > Math.abs(dy)*2) goSlide(run.cur + (dx < 0 ? 1 : -1), "swipe");
+});
+function layout(){ document.documentElement.style.setProperty("--barH", $("bar").offsetHeight+"px"); document.documentElement.style.setProperty("--footH", $("foot").offsetHeight+"px"); }
+addEventListener("resize", layout);
+
+// 시험용: 말 대신 글자를 넣어 본다 — __feed("여기서부터 첫 번째 파트입니다")
+window.__feed = t => heard(t);
+
+rebuild(); layout(); render(); tick(); startInfo();
+</script>
+</body>
+</html>
