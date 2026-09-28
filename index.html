@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Nanum+Gothic:wght@400;700&family=Nanum+Myeongjo:wght@400;700&family=Noto+Sans+KR:wght@400;700&display=swap">
 <title>강의 프롬프터</title>
 <style>
 :root{
@@ -36,11 +39,32 @@ button.primary{background:var(--cur);border-color:var(--cur);color:#fff;font-wei
 
 /* ── 대본 ── */
 #stage{position:absolute;top:var(--barH,80px);bottom:var(--footH,76px);left:0;right:0;overflow-y:auto;
-  padding:18px 24px 40vh;-webkit-overflow-scrolling:touch}
+  padding:18px 24px 0;-webkit-overflow-scrolling:touch;touch-action:pan-y;-webkit-user-select:none;user-select:none}
+#wrap{display:grid;grid-template-columns:minmax(0,1fr) var(--imgW,40%);gap:24px}
+#left{padding-bottom:40vh;min-width:0}
+#right{position:sticky;top:0;align-self:start;display:flex;flex-direction:column;gap:12px}
+#right img{display:block;width:100%;aspect-ratio:16/9;object-fit:contain;border-radius:8px;background:#fff}
+#right .noimg{aspect-ratio:16/9;border:1px dashed var(--line);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:15px;text-align:center;padding:12px}
+#nextThumb{display:flex;gap:10px;align-items:flex-start;color:var(--dim);font-size:14px}
+#nextThumb img{width:55%;opacity:.75}
+#right.hideimg{display:none} #wrap.noright{grid-template-columns:1fr}
+@media (orientation:portrait){
+  #wrap{grid-template-columns:1fr}
+  #right{order:-1;z-index:2;background:var(--bg);padding-bottom:8px}
+  #right img{max-height:26vh}
+  #nextThumb{display:none}
+}
+#fontPanel{position:fixed;right:16px;top:calc(var(--barH,80px) + 8px);z-index:5;background:var(--panel);border:1px solid var(--line);
+  border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:14px;width:320px;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+#fontPanel label{display:flex;flex-direction:column;gap:6px;color:var(--dim);font-size:14px}
+#fontPanel select{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;font-size:17px}
+#fontPanel input[type=range]{width:100%}
+.card header img{width:120px;border-radius:4px;background:#fff}
 #slideHead{display:flex;gap:10px;align-items:center;color:var(--dim);font-size:16px;margin-bottom:10px}
 .badge{border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:14px}
 .badge.break{border-color:var(--warn);color:var(--warn)}
-#script{font-size:var(--fs);line-height:1.65;word-break:keep-all}
+#script{font-size:var(--fs);line-height:var(--lh,1.65);font-family:var(--ff,inherit);word-break:keep-all}
+#nextPrev{font-family:var(--ff,inherit)}
 #script p{margin:0 0 .5em}
 .s{border-radius:8px;padding:.05em .15em;transition:background .25s,color .25s;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .s.past{color:var(--dim)}
@@ -97,16 +121,37 @@ button.primary{background:var(--cur);border-color:var(--cur);color:#fff;font-wei
   </div>
   <div class="stat" id="endBox"><small>예상 종료 (목표 <span id="goal">21:50</span>)</small><b id="endEta">--:--</b></div>
   <div style="display:flex;gap:8px">
-    <button id="fsDown" aria-label="글자 작게">가−</button>
-    <button id="fsUp" aria-label="글자 크게">가+</button>
+    <button id="fontBtn">글꼴·크기</button>
     <button id="editBtn">편집</button>
   </div>
 </div>
 
-<div id="stage">
-  <div id="slideHead"><span id="headNo"></span><span id="headBadges"></span></div>
-  <div id="script"></div>
-  <div id="nextPrev"></div>
+<div id="stage"><div id="wrap">
+  <div id="left">
+    <div id="slideHead"><span id="headNo"></span><span id="headBadges"></span></div>
+    <div id="script"></div>
+    <div id="nextPrev"></div>
+  </div>
+  <div id="right">
+    <div id="curImg"></div>
+    <div id="nextThumb"></div>
+  </div>
+</div></div>
+
+<div id="fontPanel" class="hidden">
+  <label>글꼴
+    <select id="fontSel">
+      <option value='-apple-system,"Apple SD Gothic Neo",sans-serif'>기본 고딕 (애플)</option>
+      <option value='"Noto Sans KR",sans-serif'>본고딕 (Noto Sans KR)</option>
+      <option value='"Nanum Gothic",sans-serif'>나눔고딕</option>
+      <option value='"Gowun Dodum",sans-serif'>고운돋움</option>
+      <option value='"Nanum Myeongjo",serif'>나눔명조</option>
+    </select>
+  </label>
+  <label>글자 크기 <span id="fsVal"></span><input id="fsRange" type="range" min="18" max="60" step="1"></label>
+  <label>줄 간격 <span id="lhVal"></span><input id="lhRange" type="range" min="1.3" max="2.2" step="0.05"></label>
+  <label>슬라이드 이미지 너비 <span id="iwVal"></span><input id="iwRange" type="range" min="0" max="60" step="5"></label>
+  <button id="fontClose" class="primary">닫기</button>
 </div>
 
 <div id="foot">
@@ -269,17 +314,21 @@ function heard(raw){
   if (all.length < 6) return;
   const tail = all.slice(-14);
   if (tail === lastTail) return; lastTail = tail;
-  match(tail);
+  match(all);
 }
-function score(tail, g){ const tg = grams(tail); let h = 0; tg.forEach(x => g.has(x) && h++); return tg.size ? h/tg.size : 0; }
-function match(tail){
+// 최근에 들린 글자 끝부분을 문장 길이에 맞춰 잘라 비교 (짧은 문장은 짧게 봐야 앞 문장 꼬리가 섞이지 않는다)
+function score(all, sent){
+  const tail = all.slice(-Math.max(6, Math.min(14, sent.n.length)));
+  const tg = grams(tail); let h = 0; tg.forEach(x => sent.g.has(x) && h++); return tg.size ? h/tg.size : 0;
+}
+function match(all){
   const sents = model[run.cur] || [];
   let best = null;
-  const from = Math.max(0, run.sent-1), to = Math.min(sents.length-1, run.sent+4);
-  for (let j=from;j<=to;j++){
-    let sc = score(tail, sents[j].g);
-    if (j < run.sent) sc -= .15;             // 뒤로 가기는 조심스럽게
-    if (j > run.sent+2) sc -= .1;            // 멀리 건너뛰기도 조심스럽게
+  // 슬라이드 안 모든 문장을 보되, 뒤로 가거나 멀리 건너뛸수록 더 확실해야 옮긴다
+  for (let j=0;j<sents.length;j++){
+    let sc = score(all, sents[j]);
+    if (j < run.sent) sc -= .15 + .03*(run.sent-j);
+    if (j > run.sent+2) sc -= Math.min(.2, .03*(j-run.sent-2));
     if (!best || sc > best.sc) best = {j, sc};
   }
   // 다음 슬라이드 첫 두 문장 → 자동 넘김 후보
@@ -287,17 +336,29 @@ function match(tail){
   let nxBest = null;
   if (nx && nx.length && (run.sent >= sents.length-2 || sents.length===0)){
     for (let j=0;j<Math.min(2,nx.length);j++){
-      const sc = score(tail, nx[j].g);
+      const sc = score(all, nx[j]);
       if (!nxBest || sc > nxBest.sc) nxBest = {j, sc};
     }
   }
-  if (nxBest && nxBest.sc >= .7 && (!best || nxBest.sc > best.sc + .1)){
+  if (nxBest && nxBest.sc >= .6 && (!best || nxBest.sc > best.sc + .1)){
     hits.next = (hits.next||0) + 1;
     if (hits.next >= 2){ const j = nxBest.j; goSlide(run.cur+1, "voice"); setSentence(j); }
     return;
   }
   hits.next = 0;
   if (best && best.sc >= .6 && best.j !== run.sent) setSentence(best.j);
+}
+
+/* ───────── 슬라이드 이미지 (아이패드 IndexedDB 에 보관) ───────── */
+const IMG = [];
+function idb(){ return new Promise((res,rej) => { const r = indexedDB.open("prompter",1); r.onupgradeneeded = () => r.result.createObjectStore("img"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
+async function imgSaveAll(list){
+  const d = await idb();
+  await new Promise((res,rej) => { const tx = d.transaction("img","readwrite"), st = tx.objectStore("img"); st.clear(); list.forEach((u,i) => u && st.put(u,i)); tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
+  IMG.length = 0; list.forEach((u,i) => IMG[i] = u);
+}
+async function imgLoadAll(){
+  try { const d = await idb(); await new Promise(res => { const rq = d.transaction("img").objectStore("img").openCursor(); rq.onsuccess = () => { const c = rq.result; if (c){ IMG[c.key] = c.value; c.continue(); } else res(); }; rq.onerror = () => res(); }); } catch(e){}
 }
 
 /* ───────── 화면 그리기 ───────── */
@@ -323,6 +384,8 @@ function render(){
     });
     $("script").innerHTML = html + "</p>";
   }
+  $("curImg").innerHTML = IMG[run.cur] ? `<img src="${IMG[run.cur]}" alt="${run.cur+1}번 슬라이드">` : `<div class="noimg">이 슬라이드 이미지 없음</div>`;
+  $("nextThumb").innerHTML = IMG[run.cur+1] ? `<img src="${IMG[run.cur+1]}" alt=""><span>다음<br>${run.cur+2}번</span>` : "";
   const nx = model[run.cur+1];
   $("nextPrev").innerHTML = run.cur+1 < n
     ? `<div class="label">다음 슬라이드 ${run.cur+2}번</div><span class="s" id="nxFirst">${esc(nx && nx.length ? nx[0].text : "(대본 없음)")}</span>`
@@ -413,7 +476,7 @@ function drawCards(){
   $("cards").innerHTML = db.slides.map((s,i) => {
     const start = min2hm(cum/60); cum += AL[i]; if (i+1 === ba) cum += db.settings.breakMin*60;
     return `<div class="card${i+1===ba?" isbreak":""}" data-i="${i}">
-      <header><b>${i+1}번</b><span>계획 ${start}</span>
+      <header>${IMG[i] ? `<img src="${IMG[i]}" alt="">` : ""}<b>${i+1}번</b><span>계획 ${start}</span>
         <label>배정 <input type="text" inputmode="numeric" data-k="alloc" value="${fmt(AL[i])}" placeholder="분:초"></label>
         <span>${s.allocSec!=null ? "직접 지정" : "자동"}</span>
         <label>영상(초) <input type="number" data-k="video" value="${s.videoSec||0}"></label>
@@ -467,6 +530,7 @@ $("file").onchange = async e => {
     if (/\.json$/i.test(f.name)){
       const j = JSON.parse(await f.text());
       if (j.settings) db.settings = Object.assign(db.settings, j.settings);
+      if (j.slides.some(x => x.img)){ $("startInfo").textContent = "슬라이드 이미지 저장 중…"; await imgSaveAll(j.slides.map(x => x.img || null)); applyUI(); }
       slides = j.slides;
     } else slides = await readPptx(f);
     merge(slides.map((s,i) => ({no:i+1, text:s.text||"", videoSec:s.videoSec||0, allocSec:s.allocSec ?? null, edited:!!s.edited})));
@@ -537,16 +601,35 @@ $("nextBtn").onclick = () => goSlide(run.cur+1, "tap");
 $("breakBtn").onclick = startBreak;
 $("resumeBtn").onclick = endBreak;
 $("editBtn").onclick = $("editBtn2").onclick = openEditor;
-$("script").onclick = e => { const s = e.target.closest(".s"); if (s) setSentence(+s.dataset.j); };
-const fsSet = d => { const v = Math.max(18, Math.min(60, (parseInt(getComputedStyle(document.documentElement).getPropertyValue("--fs"))||30) + d)); document.documentElement.style.setProperty("--fs", v+"px"); try { localStorage.setItem(KEY+".fs", v); } catch(e){} };
-$("fsUp").onclick = () => fsSet(2); $("fsDown").onclick = () => fsSet(-2);
-try { const v = localStorage.getItem(KEY+".fs"); if (v) document.documentElement.style.setProperty("--fs", v+"px"); } catch(e){}
-// 좌우 쓸어넘기기
-let tx = null;
-$("stage").addEventListener("touchstart", e => tx = [e.touches[0].clientX, e.touches[0].clientY], {passive:true});
-$("stage").addEventListener("touchend", e => {
-  if (!tx) return; const dx = e.changedTouches[0].clientX - tx[0], dy = e.changedTouches[0].clientY - tx[1]; tx = null;
-  if (Math.abs(dx) > 90 && Math.abs(dx) > Math.abs(dy)*2) goSlide(run.cur + (dx < 0 ? 1 : -1), "swipe");
+let dragged = false;
+$("script").onclick = e => { if (dragged){ dragged = false; return; } const s = e.target.closest(".s"); if (s) setSentence(+s.dataset.j); };
+
+/* ───────── 글꼴 · 크기 · 이미지 너비 ───────── */
+let ui = {ff:$("fontSel").options[0].value, fs:30, lh:1.65, iw:40};
+try { Object.assign(ui, JSON.parse(localStorage.getItem(KEY+".ui")) || {}); } catch(e){}
+function applyUI(){
+  const r = document.documentElement.style;
+  r.setProperty("--ff", ui.ff); r.setProperty("--fs", ui.fs+"px"); r.setProperty("--lh", ui.lh); r.setProperty("--imgW", ui.iw+"%");
+  $("fontSel").value = ui.ff; $("fsRange").value = ui.fs; $("lhRange").value = ui.lh; $("iwRange").value = ui.iw;
+  $("fsVal").textContent = ui.fs+"px"; $("lhVal").textContent = (+ui.lh).toFixed(2); $("iwVal").textContent = ui.iw ? ui.iw+"%" : "숨김";
+  const none = !ui.iw || !IMG.some(Boolean);
+  $("wrap").classList.toggle("noright", none); $("right").classList.toggle("hideimg", none);
+  try { localStorage.setItem(KEY+".ui", JSON.stringify(ui)); } catch(e){}
+}
+$("fontSel").onchange = () => { ui.ff = $("fontSel").value; applyUI(); };
+$("fsRange").oninput = () => { ui.fs = +$("fsRange").value; applyUI(); };
+$("lhRange").oninput = () => { ui.lh = +$("lhRange").value; applyUI(); };
+$("iwRange").oninput = () => { ui.iw = +$("iwRange").value; applyUI(); };
+$("fontBtn").onclick = () => $("fontPanel").classList.toggle("hidden");
+$("fontClose").onclick = () => $("fontPanel").classList.add("hidden");
+
+/* ───────── 좌우로 끌어서 넘기기 (손가락·펜·마우스) ───────── */
+let drag = null;
+$("stage").addEventListener("pointerdown", e => { drag = {x:e.clientX, y:e.clientY}; });
+$("stage").addEventListener("pointercancel", () => drag = null);
+$("stage").addEventListener("pointerup", e => {
+  if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag = null;
+  if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy)*1.5){ dragged = true; setTimeout(() => dragged = false, 400); goSlide(run.cur + (dx < 0 ? 1 : -1), "drag"); }
 });
 function layout(){ document.documentElement.style.setProperty("--barH", $("bar").offsetHeight+"px"); document.documentElement.style.setProperty("--footH", $("foot").offsetHeight+"px"); }
 addEventListener("resize", layout);
@@ -554,7 +637,8 @@ addEventListener("resize", layout);
 // 시험용: 말 대신 글자를 넣어 본다 — __feed("여기서부터 첫 번째 파트입니다")
 window.__feed = t => heard(t);
 
-rebuild(); layout(); render(); tick(); startInfo();
+rebuild(); applyUI(); layout(); render(); tick(); startInfo();
+imgLoadAll().then(() => { applyUI(); render(); });
 </script>
 </body>
 </html>
