@@ -166,7 +166,7 @@ button.primary{background:var(--cur);border-color:var(--cur);color:#fff;font-wei
 <!-- 시작 화면 -->
 <div id="startView" class="overlay">
   <h1>강의 프롬프터</h1>
-  <small style="color:var(--dim)">버전 4 · 9월 28일</small>
+  <small style="color:var(--dim)">버전 5 · 9월 28일</small>
   <p id="startInfo">대본을 불러와 주세요.</p>
   <div class="btns">
     <button id="loadBtn2">대본 불러오기</button>
@@ -243,13 +243,19 @@ const EN = [["chatgpt","챗지피티"],["openai","오픈에이아이"],["gpt","�
 const norm = s => { s = s.toLowerCase(); for (const [e,k] of EN) s = s.split(e).join(k); return s.replace(/[^0-9a-z가-힣]/g, ""); };
 function grams(s){ const g = new Set(); for (let i=0;i<s.length-1;i++) g.add(s.slice(i,i+2)); return g; }
 
-let model = [];  // 슬라이드별 [{text, n, g, p}]  p=문단번호
+let model = [];  // 슬라이드별 [{text, n, g, p, a, b}]  p=문단번호, a~b = 슬라이드 전체 글자줄에서의 위치
+let flat = [];   // 슬라이드별 문장을 이어 붙인 글자줄
+let W = {};      // 2글자 조각의 무게: "습니다"처럼 모든 문장에 나오는 조각은 가볍게, 드문 조각은 무겁게
 function rebuild(){
   model = db.slides.map(sl => {
-    const out = [];
-    paragraphs(sl.text).forEach((ps, pi) => ps.forEach(t => { const n = norm(t); out.push({text:t, n, g:grams(n), p:pi}); }));
+    const out = []; let at = 0;
+    paragraphs(sl.text).forEach((ps, pi) => ps.forEach(t => { const n = norm(t); out.push({text:t, n, g:grams(n), p:pi, a:at, b:at+n.length}); at += n.length; }));
     return out;
   });
+  flat = model.map(ss => ss.map(x => x.n).join(""));
+  const df = {}; let N = 0;
+  model.forEach(ss => ss.forEach(x => { N++; x.g.forEach(g => df[g] = (df[g]||0) + 1); }));
+  W = {}; for (const g in df) W[g] = Math.log(1 + N/df[g]);
 }
 
 /* ───────── 시간 배정 ───────── */
@@ -289,11 +295,13 @@ function goSlide(i, how){
     run.actual[run.cur] = elapsedCur();
     run.log.push({t:Date.now(), from:run.cur+1, to:i+1, how});
   }
-  run.cur = i; run.sent = -1; run.slideStartAt = Date.now(); hits = {};
+  run.cur = i; run.sent = -1; run.pos = 0; run.slideStartAt = Date.now(); hits = {}; pend = null;
   saveRun(); render(); tick();
   $("stage").scrollTop = 0;
 }
-function setSentence(j){
+function setSentence(j, byVoice){
+  const ss = model[run.cur] || [];
+  if (!byVoice) run.pos = ss[j] ? ss[j].a : 0;       // 손으로 누르면 그 문장 첫머리부터
   run.sent = j; saveRun(); paintSentences();
 }
 
@@ -321,41 +329,64 @@ function heard(raw){
   $("heard").textContent = raw.trim().slice(-80);
   const all = norm(raw);
   if (all.length < 6) return;
-  const tail = all.slice(-14);
+  const tail = all.slice(-12);
   if (tail === lastTail) return; lastTail = tail;
   match(all);
 }
-// 최근에 들린 글자 끝부분을 문장 길이에 맞춰 잘라 비교 (짧은 문장은 짧게 봐야 앞 문장 꼬리가 섞이지 않는다)
-function score(all, sent){
-  const tail = all.slice(-Math.max(6, Math.min(14, sent.n.length)));
-  const tg = grams(tail); let h = 0; tg.forEach(x => sent.g.has(x) && h++); return tg.size ? h/tg.size : 0;
+/*
+  문장 따라가기 — "글자 위치" 방식
+  1. 방금 들린 마지막 10글자를 대본 글자줄의 여러 위치와 맞대어 본다 (2글자 조각 겹침, 드문 조각일수록 점수 큼).
+  2. 가장 잘 맞는 위치 = 지금 말하는 곳. 그 위치가 들어 있는 문장이 핑크.
+  3. 앞으로는 3문장까지 건너뛸 수 있다. 1문장 이상 건너뛰면 두 번 연속 같은 곳이 나와야 옮긴다 (우연 방지).
+  4. 뒤로 가는 것은 점수가 아주 높을 때만.
+  5. 하늘색(다음 문장)은 지금 문장을 60% 이상 말했을 때부터 켠다.
+*/
+const L = 10;
+function sim(h, seg){
+  const hg = grams(h), sg = grams(seg); let got = 0, all = 0;
+  hg.forEach(g => { const w = W[g] || 2; all += w; if (sg.has(g)) got += w; });
+  return all ? got/all : 0;
 }
+function sentAt(sents, pos){ for (let j=0;j<sents.length;j++) if (pos <= sents[j].b) return j; return sents.length-1; }
+let pend = null;
 function match(all){
-  const sents = model[run.cur] || [];
+  const sents = model[run.cur] || [], T = flat[run.cur] || "";
+  const h = all.slice(-L);
+  const cur = run.sent < 0 ? -1 : run.sent;
   let best = null;
-  // 슬라이드 안 모든 문장을 보되, 뒤로 가거나 멀리 건너뛸수록 더 확실해야 옮긴다
-  for (let j=0;j<sents.length;j++){
-    let sc = score(all, sents[j]);
-    if (j < run.sent) sc -= .15 + .03*(run.sent-j);
-    if (j > run.sent+2) sc -= Math.min(.2, .03*(j-run.sent-2));
-    if (!best || sc > best.sc) best = {j, sc};
-  }
-  // 다음 슬라이드 첫 두 문장 → 자동 넘김 후보
-  const nx = model[run.cur+1];
-  let nxBest = null;
-  if (nx && nx.length && (run.sent >= sents.length-2 || sents.length===0)){
-    for (let j=0;j<Math.min(2,nx.length);j++){
-      const sc = score(all, nx[j]);
-      if (!nxBest || sc > nxBest.sc) nxBest = {j, sc};
+  if (T.length){
+    const pos = run.pos || 0;
+    const lastJ = Math.min(sents.length-1, Math.max(cur,0)+3);
+    const lo = Math.max(4, pos-25), hi = sents[lastJ].b;
+    for (let e=lo; e<=hi; e++){
+      let sc = sim(h, T.slice(Math.max(0,e-L-2), e));
+      const j = sentAt(sents, e);
+      if (e < pos-4) sc -= .2;                        // 뒤로
+      if (j > cur+1) sc -= .06*(j-cur-1);             // 건너뛰기
+      if (!best || sc > best.sc) best = {e, j, sc};
     }
   }
-  if (nxBest && nxBest.sc >= .6 && (!best || nxBest.sc > best.sc + .1)){
-    hits.next = (hits.next||0) + 1;
-    if (hits.next >= 2){ const j = nxBest.j; goSlide(run.cur+1, "voice"); setSentence(j); }
-    return;
+  // 다음 슬라이드 첫 부분 → 자동 넘김 후보 (지금 슬라이드 마지막 두 문장쯤에 있을 때만)
+  const nT = flat[run.cur+1] || "";
+  if (nT.length && (!sents.length || cur >= sents.length-2)){
+    let nb = null; const nEnd = Math.min(nT.length, (model[run.cur+1][1] || model[run.cur+1][0]).b);
+    for (let e=6; e<=nEnd; e++){ const sc = sim(h, nT.slice(Math.max(0,e-L-2), e)); if (!nb || sc > nb.sc) nb = {e, sc}; }
+    if (nb && nb.sc >= .6 && (!best || nb.sc > best.sc + .1)){
+      hits.next = (hits.next||0) + 1;
+      if (hits.next >= 2){ goSlide(run.cur+1, "voice"); run.pos = nb.e; setSentence(sentAt(model[run.cur], nb.e), true); }
+      return;
+    }
   }
   hits.next = 0;
-  if (best && best.sc >= .6 && best.j !== run.sent) setSentence(best.j);
+  if (!best || best.sc < .6) return;
+  const c = sents[cur], prog = c ? ((run.pos||0) - c.a) / Math.max(1, c.b - c.a) : 1;
+  // 1문장 이상 건너뛰거나, 지금 문장을 절반도 안 말했는데 다음으로 가려 하면 → 한 번 더 확인
+  if (best.j > cur+1 || (best.j === cur+1 && prog < .5)){
+    if (!pend || pend.j !== best.j){ pend = {j:best.j}; return; }
+  }
+  pend = null;
+  run.pos = best.e;
+  setSentence(best.j, true);
 }
 
 /* ───────── 슬라이드 이미지 (아이패드 IndexedDB 에 보관) ───────── */
@@ -403,12 +434,16 @@ function render(){
 }
 function paintSentences(){
   const spans = $("script").querySelectorAll(".s");
+  // 지금 문장을 얼마나 말했나 → 60% 넘으면 다음 문장을 하늘색으로
+  const ss = model[run.cur] || [], c = ss[run.sent];
+  const prog = c ? (run.pos - c.a) / Math.max(1, c.b - c.a) : 1;
+  const showNext = run.sent < 0 || prog >= .6;
   spans.forEach(el => {
     const j = +el.dataset.j;
-    el.className = "s" + (j < run.sent ? " past" : j === run.sent ? " cur" : j === run.sent+1 ? " next" : "");
+    el.className = "s" + (j < run.sent ? " past" : j === run.sent ? " cur" : (j === run.sent+1 && showNext) ? " next" : "");
   });
   const nf = $("nxFirst");
-  if (nf) nf.className = "s" + (run.sent >= spans.length-1 && spans.length ? " next" : "");
+  if (nf) nf.className = "s" + (run.sent >= spans.length-1 && spans.length && showNext ? " next" : "");
   const cur = $("script").querySelector(".s.cur") || $("script").querySelector(".s.next");
   if (cur){
     const st = $("stage"), r = cur.getBoundingClientRect(), sr = st.getBoundingClientRect();
