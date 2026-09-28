@@ -35,6 +35,12 @@ button.primary{background:var(--cur);border-color:var(--cur);color:#fff;font-wei
 #track{height:10px;border-radius:5px;background:var(--line);overflow:hidden}
 #fill{height:100%;width:0;background:var(--ok);transition:width .5s}
 .over #fill{background:var(--bad)} .over .row b{color:var(--bad)}
+#slideTimer .row.prog{font-size:14px;color:var(--dim);margin-top:2px}
+#slideTimer .row.prog b{font-size:15px;color:var(--text)}
+#ptrack{position:relative;height:8px;border-radius:4px;background:var(--line)}
+#pfill{height:100%;width:0;border-radius:4px;background:var(--next);transition:width .5s}
+#pmark{position:absolute;top:-4px;bottom:-4px;width:3px;left:0;background:var(--cur);border-radius:2px;transition:left .5s}
+#progGap.behind{color:var(--bad)} #progGap.ahead{color:var(--ok)}
 .late b{color:var(--bad)} .early b{color:var(--ok)}
 
 /* ── 대본 ── */
@@ -118,6 +124,8 @@ button.primary{background:var(--cur);border-color:var(--cur);color:#fff;font-wei
   <div id="slideTimer">
     <div class="row"><span id="slideNo">슬라이드 –</span><b id="slideTime">0:00 / 0:00</b></div>
     <div id="track"><div id="fill"></div></div>
+    <div class="row prog"><span>전체 진행률 <b id="progNow">0%</b> · 최적진행률 <b id="progOpt">0%</b></span><span id="progGap"></span></div>
+    <div id="ptrack"><div id="pfill"></div><div id="pmark"></div></div>
   </div>
   <div class="stat" id="endBox"><small id="endLabel">예상 종료 (목표 <span id="goal">21:50</span>)</small><b id="endEta">--:--</b></div>
   <div style="display:flex;gap:8px">
@@ -166,7 +174,7 @@ button.primary{background:var(--cur);border-color:var(--cur);color:#fff;font-wei
 <!-- 시작 화면 -->
 <div id="startView" class="overlay">
   <h1>강의 프롬프터</h1>
-  <small style="color:var(--dim)">버전 6 · 9월 28일</small>
+  <small style="color:var(--dim)">버전 7 · 9월 28일</small>
   <p id="startInfo">대본을 불러와 주세요.</p>
   <div class="btns">
     <button id="loadBtn2">대본 불러오기</button>
@@ -474,6 +482,29 @@ function tick(){
   $("endEta").textContent = min2hm(eta) + (diff > 0 ? ` (+${diff}분 초과)` : diff < 0 ? ` (${-diff}분 여유)` : " (정시)");
   $("endLabel").firstChild.textContent = run.started ? "예상 종료 (목표 " : "계획상 종료 — 강의 시작 전 (목표 ";
   $("endBox").className = "stat " + (diff > 0 ? "late" : diff < 0 ? "early" : "");
+
+  /* 진행률
+     · 전체 진행률 = 지금까지 끝낸 분량(배정 시간 기준) ÷ 전체 분량. 지금 장은 대본 위치(대본 없으면 경과 시간)만큼만 셈
+     · 최적진행률 = 21:50 에 끝내려면 지금 이만큼은 끝냈어야 하는 비율
+                  = 1 − (21:50 까지 남은 강의 가능 시간 ÷ 전체 강의 시간). 늦게 시작하거나 휴식이 길어지면 올라감 */
+  const total = AL.reduce((a,b) => a+b, 0) || 1;
+  let done = 0;
+  if (run.started){
+    for (let i=0;i<run.cur;i++) done += AL[i];
+    const T = flat[run.cur] || "";
+    const frac = T.length ? Math.min(1, (run.pos||0)/T.length) : Math.min(1, al ? el/al : 1);
+    done += al*frac;
+  }
+  const pNow = done/total*100;
+  const avail = (hm2min(db.settings.end) - nowMin)*60 - brk;
+  const pOpt = Math.max(0, Math.min(100, (1 - avail/lectureSec())*100));
+  $("progNow").textContent = Math.round(pNow) + "%";
+  $("progOpt").textContent = Math.round(pOpt) + "%";
+  const gap = Math.round(pNow - pOpt);
+  $("progGap").textContent = !run.started ? "강의 시작 전" : gap < 0 ? `${-gap}%p 뒤처짐` : gap > 0 ? `${gap}%p 앞섬` : "딱 맞음";
+  $("progGap").className = !run.started ? "" : gap <= -2 ? "behind" : gap >= 2 ? "ahead" : "";
+  $("pfill").style.width = Math.min(100, pNow) + "%";
+  $("pmark").style.left = `calc(${pOpt}% - 1px)`;
 
   if (run.onBreak){
     const left = db.settings.breakMin*60 - (Date.now()-run.breakStartAt)/1000;
