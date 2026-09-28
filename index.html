@@ -119,7 +119,7 @@ button.primary{background:var(--cur);border-color:var(--cur);color:#fff;font-wei
     <div class="row"><span id="slideNo">슬라이드 –</span><b id="slideTime">0:00 / 0:00</b></div>
     <div id="track"><div id="fill"></div></div>
   </div>
-  <div class="stat" id="endBox"><small>예상 종료 (목표 <span id="goal">21:50</span>)</small><b id="endEta">--:--</b></div>
+  <div class="stat" id="endBox"><small id="endLabel">예상 종료 (목표 <span id="goal">21:50</span>)</small><b id="endEta">--:--</b></div>
   <div style="display:flex;gap:8px">
     <button id="fontBtn">글꼴·크기</button>
     <button id="menuBtn">메뉴</button>
@@ -166,7 +166,7 @@ button.primary{background:var(--cur);border-color:var(--cur);color:#fff;font-wei
 <!-- 시작 화면 -->
 <div id="startView" class="overlay">
   <h1>강의 프롬프터</h1>
-  <small style="color:var(--dim)">버전 5 · 9월 28일</small>
+  <small style="color:var(--dim)">버전 6 · 9월 28일</small>
   <p id="startInfo">대본을 불러와 주세요.</p>
   <div class="btns">
     <button id="loadBtn2">대본 불러오기</button>
@@ -463,14 +463,16 @@ function tick(){
   $("fill").style.width = Math.min(100, al ? el/al*100 : 100) + "%";
   $("slideTimer").classList.toggle("over", el > al);
 
-  let restSec = Math.max(0, al-el);
-  for (let i=run.cur+1;i<AL.length;i++) restSec += AL[i];
+  // 강의 전(미리보기)에는 어느 장을 보고 있든 1번부터 전체 계획으로 계산
+  let restSec = run.started ? Math.max(0, al-el) : 0;
+  for (let i = run.started ? run.cur+1 : 0; i<AL.length; i++) restSec += AL[i];
   let brk = run.breakDone ? 0 : db.settings.breakMin*60;
   if (run.onBreak) brk = Math.max(0, db.settings.breakMin*60 - (Date.now()-run.breakStartAt)/1000);
   const base = run.started ? nowMin : hm2min(db.settings.start);
   const eta = base + (restSec + brk)/60;
   const diff = Math.round(eta - hm2min(db.settings.end));
-  $("endEta").textContent = min2hm(eta) + (diff ? ` (${diff>0?"+":""}${diff}분)` : "");
+  $("endEta").textContent = min2hm(eta) + (diff > 0 ? ` (+${diff}분 초과)` : diff < 0 ? ` (${-diff}분 여유)` : " (정시)");
+  $("endLabel").firstChild.textContent = run.started ? "예상 종료 (목표 " : "계획상 종료 — 강의 시작 전 (목표 ";
   $("endBox").className = "stat " + (diff > 0 ? "late" : diff < 0 ? "early" : "");
 
   if (run.onBreak){
